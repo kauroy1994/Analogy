@@ -10,7 +10,7 @@ class Pairwise_transformer(object):
         """
 
         self.blocks = blocks
-        self.delta = 0.001
+        self.delta = 0.01
 
     def sigmoid(self,x):
         """sigmoid function
@@ -35,7 +35,7 @@ class Pairwise_transformer(object):
         product = []
         n = len(matrix)
         for i in range(n):
-            item = sum([matrix[i][j]*vector[j] for j in range(n)])
+            item = sum([matrix[i][j][0]*vector[j] for j in range(n)])
             product.append(item)
         return (product)
 
@@ -116,16 +116,53 @@ class Pairwise_transformer(object):
                 next_block_input.append(value)
             block_input2 = next_block_input
 
-        #==========DOT PRODUCT OF TWO TRANSFORMERS==========
+        #==========DOT PRODUCT OF TWO TRANSFORMERS SCALED==========
 
         t1_output,t2_output = [],[]
+        k = 0
         for hi1 in block_input:
             t1_output += hi1
         for hi2 in block_input2:
+            k = sqrt(len(hi2)*len(block_input2))
             t2_output += hi2
-            
-        return (self.sigmoid(self.dot(t1_output,t2_output)))
-            
+
+        return (self.sigmoid(self.dot(t1_output,t2_output)/float(k)))
+
+    def setup_parameters(self,n):
+        """adds all parameters to a
+           parameter list
+        """
+
+        self.parameters = []
+
+        b1 = self.blocks[0]
+        b2 = self.blocks[1]
+
+        for b in range(b1):
+            q1_ws_b = self.q1_ws[b]
+            k1_ws_b = self.k1_ws[b]
+            v1_ws_b = self.v1_ws[b]
+            for i in range(n):
+                for j in range(n):
+                    parameter_q = q1_ws_b[i][j]
+                    parameter_k = k1_ws_b[i][j]
+                    parameter_v = v1_ws_b[i][j]
+                    self.parameters.append(parameter_q)
+                    self.parameters.append(parameter_k)
+                    self.parameters.append(parameter_v)
+
+        for b in range(b2):
+            q2_ws_b = self.q2_ws[b]
+            k2_ws_b = self.k2_ws[b]
+            v2_ws_b = self.v2_ws[b]
+            for i in range(n):
+                for j in range(n):
+                    parameter_q = q2_ws_b[i][j]
+                    parameter_k = k2_ws_b[i][j]
+                    parameter_v = v2_ws_b[i][j]
+                    self.parameters.append(parameter_q)
+                    self.parameters.append(parameter_k)
+                    self.parameters.append(parameter_v)
 
     def train(self,X1,X2):
         """transformer encoder trained
@@ -134,20 +171,21 @@ class Pairwise_transformer(object):
 
         n = len(X1[0])
         n_points = len(X1)
+        n_epochs = 100
         b1 = self.blocks[0]
         b2 = self.blocks[1]
         q1_ws,k1_ws,v1_ws = [],[],[]
         q2_ws,k2_ws,v2_ws = [],[],[]
 
         for b in range(b1):
-            q1_ws.append([[random() for i in range(n)] for i in range(n)])
-            k1_ws.append([[random() for i in range(n)] for i in range(n)])
-            v1_ws.append([[random() for i in range(n)] for i in range(n)])
+            q1_ws.append([[[random()] for i in range(n)] for i in range(n)])
+            k1_ws.append([[[random()] for i in range(n)] for i in range(n)])
+            v1_ws.append([[[random()] for i in range(n)] for i in range(n)])
 
         for b in range(b2):
-            q2_ws.append([[random() for i in range(n)] for i in range(n)])
-            k2_ws.append([[random() for i in range(n)] for i in range(n)])
-            v2_ws.append([[random() for i in range(n)] for i in range(n)])
+            q2_ws.append([[[random()] for i in range(n)] for i in range(n)])
+            k2_ws.append([[[random()] for i in range(n)] for i in range(n)])
+            v2_ws.append([[[random()] for i in range(n)] for i in range(n)])
 
         self.q1_ws = q1_ws
         self.k1_ws = k1_ws
@@ -156,20 +194,18 @@ class Pairwise_transformer(object):
         self.k2_ws = k2_ws
         self.v2_ws = v2_ws
 
-        """ **TODO** THIS PART CONTINUE LATER
+        self.setup_parameters(n)
         
-        for parameter in self.parameters:
-            for i in range(n_points):
-                for j in range(n_points):
-                    output = self.compute(X1[i],X2[j])
-
-        """
-        
-
-        
-
-        
-
-        
-
-    
+        for epoch in range(n_epochs):
+            p = 0
+            for parameter in self.parameters:
+                p += 1
+                print ('TRAINING epoch :',epoch,'parameter: ',p)
+                for i in range(n_points):
+                    for j in range(n_points):
+                        output = self.compute(X1[i],X2[j])
+                        parameter[0] = parameter[0] + self.delta
+                        delta_output = self.compute(X1[i],X2[j])
+                        parameter[0] = parameter[0] - self.delta
+                        gradient = (delta_output - output)/float(self.delta)
+                        parameter[0] = parameter[0] - self.delta*gradient
